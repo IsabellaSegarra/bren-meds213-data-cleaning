@@ -1,0 +1,178 @@
+---
+title: "ds213_data_cleaning_assign_Isabella_Segarra"
+format: html
+---
+
+# Week 2 - Data Cleaning
+In this assignment we are tasked with cleaning the `snow_cover` column from our 
+```{r}
+#| label: set-up
+
+# ...... Load Libraries ......
+library(here)
+library(tidyverse)
+library(dplyr)
+library(janitor)
+
+# ......Import Data ......
+snow_cover <- read_csv(here("data", "processed", "snow_cover.csv")) %>% 
+  clean_names() # Make every column lower-snake-case
+
+```
+
+# Step 1
+In this step I need to clean the Water_cover column to transform it into the correct data type and respect expectations for a percentage.
+
+My workflow for doing that is as follows:
+
+- Investigate the class of the `water_cover` column. We expect this to be numeric, however it is of class character because of non-numeric rows. 
+- Investigate the non-numeric rows. This return 5 rows with non-numeric values. 
+- Fix the non-numeric values to be NA. This loss is okay because it is better to state these values are NA rather than adding values. 
+- Transform the column to be numeric. I used this operation as a test, if it fails then there are values that are still causing problems and if not, then the column is transformed. 
+-Check that the values in the column are between 0 and 100 since this is a percentage. This resulted in two values that were most likely entered incorrectly, these are turned to NA values. 
+- Check the range of values within the water column, they must be between 0 and 100. 
+```{r}
+# What is the current data type of the water column?
+class(snow_cover$water_cover)
+
+# Investigate problematic rows -- non-numeric values 
+snow_cover %>%
+  count(water_cover) %>%
+  filter(is.na(as.numeric(water_cover)))
+
+# Filter out non-numeric values 
+snow_cover <- snow_cover %>%
+  mutate(water_cover = ifelse(water_cover %in% c(".", "-", "n/a", "unk"), NA, water_cover))
+
+# Transform into numeric
+snow_cover <- snow_cover %>%
+  mutate(water_cover = as.numeric(water_cover))
+
+# Check that values are between 0 and 100 
+snow_cover %>% 
+  filter(water_cover < 0 | water_cover > 100)
+
+# Convert values over 100 to NA and less than 0 to NA
+snow_cover <- snow_cover %>% 
+  mutate(water_cover = ifelse(water_cover > 100, NA, water_cover),
+         water_cover = ifelse(water_cover < 0, NA, water_cover))
+
+# Check that the range is between 0 and 100, must remove nas 
+range(snow_cover$water_cover, na.rm = TRUE)
+
+
+```
+
+# Step 2
+Clean the Land_cover column to transform it into the correct data type and respect expectations for a percentage.
+
+My workflow for doing that is as follows:
+- Similar to `water_cover`, we will investigate the class of the `land_cover` column. We expect this to be numeric, however it is of class character because of non-numeric rows. 
+- Similar to `water_cover`, the `land_cover` column also contains some non-numeric values that need to be transformed. 
+- Transform the column to be numeric now that all the values are numeric. 
+- Check that the values range between 0 and 100. 
+- Change values that exceed the normal percentage into NA values. 
+- Confirm the range is between 0 and 100 as a sanity check. 
+
+```{r}
+# What is the current data type of the land column?
+class(snow_cover$land_cover) 
+
+# Investigate problematic rows -- non-numeric values 
+snow_cover %>%
+  count(land_cover) %>%
+  filter(is.na(as.numeric(land_cover)))
+
+# Filter out non-numeric values 
+snow_cover <- snow_cover %>%
+  mutate(land_cover = ifelse(land_cover %in% c(".", "-", "n/a", "unk"), NA, land_cover))
+
+# Transform into numeric
+snow_cover <- snow_cover %>%
+  mutate(land_cover = as.numeric(land_cover))
+
+
+# Check that values are between 0 and 100 
+snow_cover %>% 
+  filter(land_cover < 0 | land_cover > 100)
+
+# Convert values over 100 to NA and less than 0 to NA
+snow_cover <- snow_cover %>% 
+  mutate(land_cover = ifelse(land_cover > 100, NA, land_cover),
+         land_cover = ifelse(land_cover < 0, NA, land_cover))
+
+# Check that the range is between 0 and 100, must remove nas 
+range(snow_cover$water_cover, na.rm = TRUE)
+
+  
+```
+
+# Step 3
+Use the relationship that the three cover columns (Snow, Water, Land) should sum up to 100% to infer missing values where possible and recompute the Total_cover column as needed. 
+
+My workflow is as follows:
+- Since the `total_cover` column is not numeric, repeat the steps above to transform it to be numeric after removing problematic characters. 
+- Confirm that there are missing values in snow, water, and land. These values need to be inferred as long as there are at least two values in the row that have values. 
+- Check that there are no values that exceed 100 for total cover. Transform these to be 100 assuming these 22 rows were typed wrong. 
+- Following the logic below, we can infer the values as long as they sum to 100. 
+
+snow + water + land = 100 (total cover)
+water = 100 - snow - land
+snow = 100 -water - land 
+land = 100 - snow - water
+
+```{r}
+# Confirm the class of total cover
+class(snow_cover$total_cover)
+
+snow_cover %>%
+  count(total_cover) %>%
+  filter(is.na(as.numeric(total_cover)))
+
+# Filter out non-numeric values 
+snow_cover <- snow_cover %>%
+  mutate(total_cover = ifelse(land_cover %in% c(".", "-", "n/a", "<row r=\\64\\ spans=\\1:11\\ x14ac:dyDescent=\\0.2\\>"), NA, total_cover))
+
+# Transform into numeric
+snow_cover <- snow_cover %>%
+  mutate(total_cover = as.numeric(total_cover))
+
+# Investigate the number of NA rows 
+
+snow_cover %>% 
+  filter(is.na(water_cover)) 
+
+snow_cover %>% 
+  filter(is.na(snow_cover))
+
+snow_cover %>% 
+  filter(is.na(land_cover))
+
+# Investigate rows where total cover exceeds 100 
+snow_cover %>% 
+  filter(total_cover > 100) # 22 rows
+
+# Input values over 100 as 100 
+snow_cover <- snow_cover %>% 
+  mutate(total_cover = ifelse(total_cover > 100, 100, total_cover))
+
+# total cover = snow + water + land 
+
+# Infer column values 
+snow_cover_fixed <- snow_cover %>%
+  mutate(
+    # If snow_cover is na, infer from water and land 
+    snow_cover  = ifelse(is.na(snow_cover),  100 - water_cover - land_cover, snow_cover),
+      # If water_cover is na, infer from snow and land 
+    water_cover = ifelse(is.na(water_cover), 100 - snow_cover  - land_cover, water_cover),
+    # If land cover is na, infer from snow and water 
+    land_cover  = ifelse(is.na(land_cover),  100 - snow_cover  - water_cover, land_cover),
+    # Sum the columns to equal total-cover 
+    total_cover = snow_cover + water_cover + land_cover
+  )
+
+# Save dataframe as csv 
+snow_cover_fixed <- write_csv(snow_cover_fixed,"data/processed/all_cover_fixed_Isabella_Segarra.csv")
+                              
+```
+
